@@ -25,7 +25,7 @@ This project develops a machine learning-powered clinical decision support inter
 - Potential patient harm from therapy gaps
 - Increased nursing workload
 
-**Current Limitation**: Our hospital's Sepsis Watch model, while technically successful, suffers from an explainability gap. Providers routinely ask "Why is this patient flagged?" without receiving satisfying answers beyond "the model says so." This project aims to solve that trust deficit in a different dimension with CRRT. 
+**Current Limitation**: I have encountered numerous scenarios where a predictive model identifies an alert for a patient, which we are then required to alert a provider about. While these models are technically successful, many suffer from an explainability gap. Providers routinely ask "Why is this patient flagged?" without receiving satisfying answers beyond "the model says so." This project aims to solve that trust deficit in a different dimension with CRRT. 
 
 ---
 
@@ -164,7 +164,7 @@ Testing if dimensionality reduction maintains performance:
 **Options**:
 - **MDCalc-style calculator**: Requires feature selection to 10-15 most important features
 - **Lightweight Epic integration**: Auto-pull labs/CRRT parameters (requires IT resources)
-- **Full integration**: Requires Sepsis Watch-level institutional backing (unlikely for smaller patient population)
+- **Full integration**: Requires institutional-level backing (unlikely for smaller patient population)
 
 **Next Step**: Systematic feature selection testing to identify minimum viable feature set (target: 15 features with <5% AUC loss).
 
@@ -330,7 +330,7 @@ This project was completed as part of DTI530: Technology Core, part of Duke Univ
 5. ✅ Addressed deployment challenges (explainability, feasibility, trust)
 
 ### Related Work
-This project builds on lessons learned from our hospital's Sepsis Watch implementation, which demonstrates that importance of explainable AI for full clinical trust. While the sepsis model is successfully used every day, frequent provider questions about alert justification reveal an explainability gap that undermines confidence.
+This project builds on lessons learned from our hospital's sepsis model implementation, which demonstrates that importance of explainable AI for full clinical trust. While the sepsis model is successfully used every day, frequent provider questions about alert justification reveal an explainability gap that undermines confidence.
 
 ---
 
