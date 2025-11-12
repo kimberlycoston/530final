@@ -58,7 +58,6 @@ Tested four algorithms with four resampling strategies each:
 
 | Model | Best Strategy | ROC-AUC | Avg Precision |
 |-------|---------------|---------|---------------|
-| Logistic Regressio | |
 | **XGBoost** ⭐ | Original (Imbalanced) | **0.9904** | **0.8891** |
 | Random Forest | SMOTE | 0.9507 | 0.7437 |
 | Logistic Regression | SMOTE | 0.9165 | 0.7249 |
