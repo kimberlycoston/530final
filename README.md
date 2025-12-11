@@ -325,10 +325,7 @@ shap.summary_plot(shap_values, X_test_scaled, feature_names=feature_names)
 
 ## 🎓 Academic Context
 
-This project was completed as part of **BME 580: Biomedical Data Science** and **DTI 530: Technology Core** at Duke University's Master of Engineering in Design, Technology, & Innovation program.
-
-### Presented At
-- **Duke Health Data Science Poster Showcase** (December 2025)
+This project was completed as part of DTI 530: Technology Core at Duke University's Master of Engineering in Design, Technology, & Innovation program.
 
 ### Learning Objectives Addressed
 1. ✅ Applied supervised learning (classification) to real clinical data
@@ -339,13 +336,11 @@ This project was completed as part of **BME 580: Biomedical Data Science** and *
 
 ---
 
-## 🔮 Future Work
+## Future Work
 
-- [ ] Prospective validation with real-time Duke Health data
-- [ ] Epic EHR integration for automated feature extraction
-- [ ] A/B testing: explainable interface vs. traditional alerts
+- [ ] Prospective validation with real-time internal hospital data
+- [ ] Temporal validation to simulate prospective deployment
 - [ ] Uncertainty quantification for model confidence
-- [ ] Multi-site validation study
 
 ---
 
