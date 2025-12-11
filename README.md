@@ -1,23 +1,35 @@
-# CRRT Clot Formation Prediction: Clinical Decision Support Interface
+# CRRT Clot Formation Prediction: Clinical Decision Support System
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
-[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange.svg)](https://jupyter.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688.svg)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-Frontend-61DAFB.svg)](https://reactjs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## 📋 Project Overview
 
-This project develops a machine learning-powered clinical decision support interface to predict clot formation in Continuous Renal Replacement Therapy (CRRT) circuits. The goal is to create a trustworthy, explainable tool that healthcare providers will actually use—avoiding the pitfalls of "black box" AI systems that get dismissed in clinical settings.
+This project develops a machine learning-powered clinical decision support system to predict clot formation in Continuous Renal Replacement Therapy (CRRT) circuits. The system combines XGBoost prediction with SHAP explainability and LLM-generated clinical recommendations to create a trustworthy tool that healthcare providers will actually use.
 
 ### 🎯 Key Objectives
 
 1. **Predict clotting risk** using lab values and CRRT machine parameters
-2. **Provide explainable predictions** that clinicians can validate against their judgment
-3. **Design a practical interface** that balances algorithmic accuracy with real-world usability
-4. **Address deployment feasibility** for clinical implementation
+2. **Provide explainable predictions** via SHAP feature contributions that clinicians can validate
+3. **Generate actionable recommendations** using LLM integration for clinical context
+4. **Deploy as a web application** with FastAPI backend and React frontend
 
 ---
 
-## 🏥 Clinical Context
+## 🥇 Key Achievements
+
+| Metric | Value |
+|--------|-------|
+| **ROC-AUC** | 0.74 |
+| **Patient Observations** | 125,611 |
+| **Features Engineered** | 60 |
+| **Deployment-Ready Features** | 20 (99.55% performance retention) |
+
+---
+
+## 🥏 Clinical Context
 
 **Problem**: CRRT circuit clotting causes:
 - Treatment interruptions (2+ hour downtime per event)
@@ -25,7 +37,7 @@ This project develops a machine learning-powered clinical decision support inter
 - Potential patient harm from therapy gaps
 - Increased nursing workload
 
-**Current Limitation**: I have encountered numerous scenarios where a predictive model identifies an alert for a patient, which we are then required to alert a provider about. While these models are technically successful, many suffer from an explainability gap. Providers routinely ask "Why is this patient flagged?" without receiving satisfying answers beyond "the model says so." This project aims to solve that trust deficit in a different dimension with CRRT. 
+**Current Limitation**: Many predictive models in clinical settings suffer from an explainability gap. Providers routinely ask "Why is this patient flagged?" without receiving satisfying answers beyond "the model says so." This project addresses that trust deficit by combining prediction with SHAP-based explanations and LLM-generated clinical context.
 
 ---
 
@@ -34,176 +46,162 @@ This project develops a machine learning-powered clinical decision support inter
 - **Source**: MIMIC-IV database (deidentified ICU data)
 - **Cohort**: Adult patients receiving CRRT
 - **Observations**: 125,611 time points
-- **Features**: 57 numeric features after preprocessing
-  - Lab values (platelets, creatinine, BUN, phosphate, etc.)
-  - CRRT machine parameters (blood flow, citrate dose, filter pressure)
-  - Temporal features (prior clot history, rate of change)
+- **Features**: 60 numeric features after preprocessing
+  - Lab values (platelets, creatinine, BUN, phosphate, PTT, fibrinogen, etc.)
+  - CRRT machine parameters (blood flow, citrate dose, filter pressure, effluent pressure)
+  - Anticoagulation mode (one-hot encoded: heparin, citrate, none)
+  - Temporal features (rate of change for key labs)
 - **Target**: Binary clot formation (clots_corrected: 0=no clot, 1=clot)
-- **Class Balance**: 9.54% clot rate (imbalanced but workable)
+- **Class Balance**: ~14% clot rate (addressed via class weighting)
 
 ### Data Preprocessing
-- Removed 14 features with >80% missing data
-- Excluded 6 non-numeric categorical features
+- Removed features with >80% missing data
 - Applied median imputation for remaining missing values
 - Standardized features using StandardScaler
-- Train/test split: 80/20 (stratified)
+- **Grouped train/test split by circuit ID** to prevent temporal data leakage
+- Removed `clots_increasing` feature (contained future information)
 
 ---
 
 ## 🧠 Methodology
 
-### Supervised Learning Models
+### Addressing Data Leakage
 
-Tested four algorithms with four resampling strategies each:
+A critical methodological improvement was implementing grouped train/test splits by circuit ID. This prevents the model from "seeing" future observations from the same CRRT circuit during training, which previously inflated performance metrics.
+
+```python
+# Grouped split prevents data leakage
+from sklearn.model_selection import GroupShuffleSplit
+
+gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+train_idx, test_idx = next(gss.split(X, y, groups=circuit_ids))
+```
+
+### Model Comparison
 
 | Model | Best Strategy | ROC-AUC | Avg Precision |
 |-------|---------------|---------|---------------|
-| **XGBoost** ⭐ | Original (Imbalanced) | **0.9904** | **0.8891** |
-| Random Forest | SMOTE | 0.9507 | 0.7437 |
-| Logistic Regression | SMOTE | 0.9165 | 0.7249 |
+| **XGBoost** ⭐ | Original (Class Weighted) | **0.74** | **0.94** |
+| Random Forest | SMOTE | 0.71 | 0.93 |
+| Logistic Regression | SMOTE | 0.69 | 0.92 |
 
-**Winner**: XGBoost with original imbalanced data achieved near-perfect discrimination.
+### Feature Importance (Top 20 by Gain)
 
-### Unsupervised Learning Analysis
+| Rank | Feature | Importance |
+|------|---------|------------|
+| 1 | blood_flow | 0.047 |
+| 2 | phosphate | 0.031 |
+| 3 | filter_pressure | 0.029 |
+| 4 | prefilter_replacement_rate | 0.028 |
+| 5 | effluent_pressure | 0.027 |
+| 6 | creatinine | 0.026 |
+| 7 | mode_citrate | 0.024 |
+| 8 | mode_heparin | 0.024 |
+| 9 | postfilter_replacement_rate | 0.024 |
+| 10 | effluent_bloodflow_ratio | 0.024 |
 
-#### PCA (Principal Component Analysis)
-- **Finding**: High-dimensional problem
-- PC1 explains only 6% of variance (no dominant factor)
-- 30 components needed for 80% variance
-- 37 components needed for 90% variance
-- **Implication**: Cannot simplify to 10-15 features without performance loss
+### Deployment Feasibility Analysis
 
-#### K-means Clustering
-- **Finding**: Two distinct patient phenotypes
-- **Cluster 0 (Low-Risk)**: 7.4% clot rate, 69% of patients
-- **Cluster 1 (High-Risk)**: 14.4% clot rate, 31% of patients
-- Statistical significance: χ² = 1212.29, p < 0.0001
-- **Separation pattern**: Kidney dysfunction (elevated creatinine, BUN)
-- **Implication**: Pattern recognition can validate predictions
+Testing whether a reduced feature set maintains performance for practical deployment:
 
-### Feature Importance (Top 10)
+| Features | ROC-AUC | Performance Retention |
+|----------|---------|----------------------|
+| 60 (All) | 0.737 | — (baseline) |
+| 20 (Top) | 0.734 | **99.55%** ✅ |
 
-1. **prior_clots_count** (33.0%) - History of clotting events
-2. **phosphate** (5.6%) - Electrolyte imbalance indicator
-3. **creatinine** (3.9%) - Kidney function marker
-4. **bun** (3.2%) - Kidney function marker
-5. **platelet** (2.8%) - Coagulation factor
-6. **effluent_pressure** (2.5%) - Circuit mechanical stress
-7. **ldh** (2.3%) - Cell damage marker
-8. **heparin_dose** (2.1%) - Anticoagulation level
-9. **potassium** (1.9%) - Electrolyte balance
-10. **ptt** (1.8%) - Coagulation time
+**Conclusion**: Top 20 features achieve near-identical performance, making manual entry deployment feasible.
 
 ---
 
-## 🎨 Interface Design
+## 🎨 Explainability: SHAP Integration
 
-### Visualization 1: Risk Gauge
-- **Purpose**: Immediate situational awareness
-- **Display**: "87% - HIGH RISK (95th percentile)"
-- **Benefit**: Quick assessment without cognitive overload
+The system uses SHAP (SHapley Additive exPlanations) TreeExplainer to provide patient-level feature contributions:
 
-### Visualization 2: Feature Contribution Bar Chart
-- **Purpose**: Explainability and trust-building
-- **Display**: 
-  ```
-  Prior Clots (3 events)    ████████████████  45%
-  Phosphate ↑ (7.2 mg/dL)   ████████          18%
-  Creatinine ↑ (3.1 mg/dL)  ██████            12%
-  Platelets ↓ (89 K/µL)     ████              8%
-  Filter Pressure ↑ (185)   ███               6%
-  ```
-- **Benefit**: Providers can validate against clinical judgment
+```python
+import shap
+
+explainer = shap.TreeExplainer(xgb_model)
+shap_values = explainer.shap_values(patient_data)
+
+# Visualize top contributing factors
+shap_df = pd.DataFrame({
+    'feature': feature_names,
+    'shap_value': shap_values[0]
+}).sort_values(by='shap_value', key=abs, ascending=False)
+```
+
+### Example Output
+```
+Patient Risk Score: 67% (HIGH RISK)
+
+Top Contributing Factors:
+  filter_pressure ↑ (285 mmHg)    ████████████  +0.18
+  mode_citrate (active)           ████████      +0.12
+  phosphate ↑ (6.8 mg/dL)         ██████        +0.09
+  blood_flow ↓ (180 mL/min)       ████          +0.06
+  PTT ↓ (42 sec)                  ███           -0.04
+```
+
+---
+
+## 🚀 Deployment Architecture
+
+### Backend (FastAPI on Render)
+- RESTful API for predictions
+- SHAP explanations endpoint
+- OpenAI API integration for clinical recommendations
+- Model served via pickle/joblib
+
+### Frontend (React on Vercel)
+- Risk gauge visualization
+- SHAP waterfall chart for feature contributions
+- LLM-generated clinical recommendations panel
+- Responsive design for bedside use
 
 ### LLM Integration
-- Natural language synthesis of predictions
-- Explanation of feature contributions in clinical terms
+Natural language synthesis of predictions using OpenAI API:
+```
+"This patient shows elevated clotting risk (67%) primarily driven by 
+high filter pressure and active citrate anticoagulation. Consider 
+evaluating circuit patency and adjusting replacement fluid rates. 
+The elevated phosphate level may indicate metabolic disturbance 
+requiring attention."
+```
 
 ---
 
 ## 📈 Key Results
 
-### Model Performance
-- **ROC-AUC**: 0.9904 (near-perfect discrimination)
-- **Precision**: 0.899 (90% of alerts are true positives)
-- **Recall**: 0.917 (catches 92% of clots)
-- **F1-Score**: 0.908
+### Model Performance (After Leakage Correction)
+- **ROC-AUC**: 0.74 (realistic clinical performance)
+- **Average Precision**: 0.94
+- **Recall at 50% threshold**: 0.87 (catches 87% of clots)
 
-### Confusion Matrix (Test Set: 25,123 patients)
-|                | Predicted: No Clot | Predicted: Clot |
-|----------------|-------------------|-----------------|
-| **Actual: No Clot** | 22,477 (TN) | 248 (FP) |
-| **Actual: Clot**    | 199 (FN) | 2,199 (TP) |
-
-- **False Positive Rate**: 1.1% (minimal alert fatigue)
-- **False Negative Rate**: 8.3% (misses ~199 clots, but catches majority)
-
-### PCA vs XGBoost Comparison
-Testing if dimensionality reduction maintains performance:
-
-| Features | ROC-AUC | Performance Loss |
-|----------|---------|------------------|
-| 57 (Original) | 0.9904 | — (baseline) |
-| 37 (PCA 90%) | 0.9273 | -6.31% ❌ |
-| 30 (PCA 80%) | 0.9190 | -7.14% ❌ |
-
-**Conclusion**: All 57 features necessary for optimal performance. CRRT clotting is genuinely high-dimensional.
-
----
-
-## 🚧 Open Questions & Future Work
-
-### 1. First-Time Patient Performance
-**Issue**: `prior_clots_count` contributes 45% to risk scores. Does performance degrade for first-time CRRT patients without clotting history?
-
-**Next Step**: Subgroup analysis comparing model performance on patients with vs. without prior clots.
-
-### 2. Deployment Feasibility
-**Challenge**: Model requires 57 features, but manual entry of 57 values is clinically unrealistic.
-
-**Options**:
-- **MDCalc-style calculator**: Requires feature selection to 10-15 most important features
-- **Lightweight Epic integration**: Auto-pull labs/CRRT parameters (requires IT resources)
-- **Full integration**: Requires institutional-level backing (unlikely for smaller patient population)
-
-**Next Step**: Systematic feature selection testing to identify minimum viable feature set (target: 15 features with <5% AUC loss).
-
-### 3. Alert Threshold Calibration
-**Question**: At what risk score (75%? 85%? 95th percentile?) should the system escalate from passive monitoring to active provider notification?
-
-**Consideration**: Balance sensitivity (catch clots) vs. alert fatigue (don't overwhelm providers).
-
-**Next Step**: Stakeholder interviews with nephrologists and ICU nurses.
-
-### 4. Phenotype-Specific Recommendations
-**Question**: Should the LLM provide different clinical recommendations for patients matching the "kidney injury phenotype" vs. "stable phenotype"?
-
-**Example**: "This patient exhibits kidney injury pattern—focus on volume status and nephrotoxin avoidance."
-
-### 5. Missing Lab Handling
-**Question**: How should the interface handle incomplete lab data in time-sensitive scenarios?
-
-**Options**:
-- Display "Model confidence: LOW" warning
-- Attempt prediction with degraded accuracy
-- Refuse prediction until critical labs available
+### Confusion Matrix Insights
+- Balanced sensitivity/specificity trade-off
+- Tunable threshold for clinical preference (sensitivity vs. alert fatigue)
 
 ---
 
 ## 🛠️ Technology Stack
 
-### Core Libraries
-- **scikit-learn** (1.3.0): Machine learning algorithms
-- **XGBoost** (2.0.0): Gradient boosting (best model)
-- **pandas** (2.0.3): Data manipulation
-- **numpy** (1.24.3): Numerical computing
-- **matplotlib** (3.7.2): Visualization
-- **seaborn** (0.12.2): Statistical visualization
+### Core ML Libraries
+- **scikit-learn** (1.7.2): Preprocessing, evaluation
+- **XGBoost** (2.0.0): Gradient boosting classifier
+- **SHAP** (0.50.0): Model explainability
+- **pandas** (2.3.3): Data manipulation
 - **imbalanced-learn** (0.11.0): SMOTE resampling
 
+### Web Application
+- **FastAPI**: Backend API framework
+- **React**: Frontend framework
+- **Render**: Backend hosting
+- **Vercel**: Frontend hosting
+- **OpenAI API**: LLM recommendations
+
 ### Development Environment
-- **Python**: 3.8+
-- **Jupyter Notebook**: Interactive analysis
+- **Python**: 3.13+
+- **Node.js**: 18+
 - **MIMIC-IV**: Clinical database
 
 ---
@@ -212,20 +210,28 @@ Testing if dimensionality reduction maintains performance:
 
 ```
 crrt-clotting-prediction/
-├── README.md                               
-├── requirements.txt                        
-├── part2_crrt_clots_prediction_v3.ipynb    # Main analysis notebook
-├── outputs/
-│   ├── confusion_matrices_best_models.png
-│   ├── roc_curves_best_models.png
-│   ├── pca_vs_kmeans_comparison.png
-│   ├── kmeans_feature_profiles.png
-│   ├── xgboost_original_vs_pca.png
-│   └── feature_importance_top20.png
-├── projectproposal/
-│   ├── LowFidelity_Sketch.pdf
-│   ├── projectproposal_sketches.pdf
-│   └──  projectproposal.docx
+├── README.md
+├── requirements.txt
+├── prediction_model.ipynb        # Main analysis notebook
+├── backend/
+│   ├── main.py                   # FastAPI application
+│   ├── model/
+│   │   ├── xgb_model.pkl         # Trained XGBoost model
+│   │   └── scaler.pkl            # Feature scaler
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── RiskGauge.jsx
+│   │   │   ├── SHAPChart.jsx
+│   │   │   └── Recommendations.jsx
+│   │   └── App.jsx
+│   └── package.json
+└── outputs/
+    ├── confusion_matrices.png
+    ├── roc_curves.png
+    ├── shap_summary.png
+    └── feature_importance.png
 ```
 
 ---
@@ -247,18 +253,14 @@ pandas>=2.0.3
 numpy>=1.24.3
 scikit-learn>=1.3.0
 xgboost>=2.0.0
+shap>=0.50.0
 matplotlib>=3.7.2
 seaborn>=0.12.2
 imbalanced-learn>=0.11.0
-jupyter>=1.0.0
-scipy>=1.10.1
+fastapi>=0.100.0
+uvicorn>=0.23.0
+openai>=1.0.0
 ```
-
-### Data Access
-This project uses the MIMIC-IV database, which requires:
-1. Completion of CITI training
-2. Signed data use agreement
-3. PhysioNet credentialed access
 
 ### Running the Analysis
 ```bash
@@ -266,9 +268,19 @@ This project uses the MIMIC-IV database, which requires:
 jupyter notebook
 
 # Open the main notebook
-notebooks/part2_crrt_clots_prediction_v3.ipynb
+prediction_model.ipynb
+```
 
-# Run all cells
+### Running the Web Application
+```bash
+# Backend
+cd backend
+uvicorn main:app --reload
+
+# Frontend
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
@@ -278,10 +290,14 @@ notebooks/part2_crrt_clots_prediction_v3.ipynb
 ### Train the XGBoost Model
 ```python
 from xgboost import XGBClassifier
-from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import GroupShuffleSplit
 
-# Load preprocessed data (see notebook)
-# X_train_scaled, X_test_scaled, y_train, y_test
+# Grouped split to prevent leakage
+gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+train_idx, test_idx = next(gss.split(X, y, groups=circuit_ids))
+
+X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
 # Train XGBoost
 xgb = XGBClassifier(
@@ -292,51 +308,44 @@ xgb = XGBClassifier(
     eval_metric='logloss'
 )
 xgb.fit(X_train_scaled, y_train)
-
-# Evaluate
-y_prob = xgb.predict_proba(X_test_scaled)[:, 1]
-auc = roc_auc_score(y_test, y_prob)
-print(f"ROC-AUC: {auc:.4f}")  # Expected: 0.9904
 ```
 
-### Run K-means Clustering
+### Generate SHAP Explanations
 ```python
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
+import shap
 
-# Reduce dimensionality for clustering
-pca = PCA(n_components=25, random_state=42)
-X_pca = pca.fit_transform(X_train_scaled)
+explainer = shap.TreeExplainer(xgb)
+shap_values = explainer.shap_values(X_test_scaled)
 
-# Fit K-means (k=2)
-kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
-clusters = kmeans.fit_predict(X_pca)
-
-# Analyze clot rates by cluster
-print(pd.crosstab(clusters, y_train, normalize='index'))
+# Summary plot
+shap.summary_plot(shap_values, X_test_scaled, feature_names=feature_names)
 ```
 
 ---
 
 ## 🎓 Academic Context
 
-This project was completed as part of DTI530: Technology Core, part of Duke University's Master of Engineering in Design, Technology, & Innovation program.
+This project was completed as part of **BME 580: Biomedical Data Science** and **DTI 530: Technology Core** at Duke University's Master of Engineering in Design, Technology, & Innovation program.
+
+### Presented At
+- **Duke Health Data Science Poster Showcase** (December 2025)
 
 ### Learning Objectives Addressed
 1. ✅ Applied supervised learning (classification) to real clinical data
-2. ✅ Performed unsupervised learning (PCA, K-means) for pattern discovery
-3. ✅ Evaluated model performance using appropriate metrics for imbalanced data
-4. ✅ Designed user-centered interface based on clinical workflow needs
-5. ✅ Addressed deployment challenges (explainability, feasibility, trust)
-
-### Related Work
-This project builds on lessons learned from our hospital's sepsis model implementation, which demonstrates that importance of explainable AI for full clinical trust. While the sepsis model is successfully used every day, frequent provider questions about alert justification reveal an explainability gap that undermines confidence.
+2. ✅ Addressed temporal data leakage through grouped splitting
+3. ✅ Implemented SHAP explainability for clinical trust
+4. ✅ Deployed full-stack web application (FastAPI + React)
+5. ✅ Integrated LLM for clinical recommendation generation
 
 ---
 
-## 🤝 Acknowledgments
+## 🔮 Future Work
 
-- **MIMIC-IV Database**
+- [ ] Prospective validation with real-time Duke Health data
+- [ ] Epic EHR integration for automated feature extraction
+- [ ] A/B testing: explainable interface vs. traditional alerts
+- [ ] Uncertainty quantification for model confidence
+- [ ] Multi-site validation study
 
 ---
 
@@ -344,39 +353,32 @@ This project builds on lessons learned from our hospital's sepsis model implemen
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-**Note**: The MIMIC-IV data is subject to separate data use agreements and cannot be redistributed. See PhysioNet for access requirements.
+**Note**: The MIMIC-IV data is subject to separate data use agreements and cannot be redistributed.
 
 ---
 
 ## 📚 References
 
-1. Johnson, A.E.W., Bulgarelli, L., Shen, L., et al. (2023). MIMIC-IV, a freely accessible electronic health record dataset. *Scientific Data*, 10(1), 1.
+1. Johnson, A.E.W., et al. (2023). MIMIC-IV, a freely accessible electronic health record dataset. *Scientific Data*, 10(1), 1.
 
 2. Chen, T., & Guestrin, C. (2016). XGBoost: A scalable tree boosting system. *Proceedings of the 22nd ACM SIGKDD*, 785-794.
 
-3. Chawla, N.V., Bowyer, K.W., Hall, L.O., & Kegelmeyer, W.P. (2002). SMOTE: Synthetic minority over-sampling technique. *Journal of Artificial Intelligence Research*, 16, 321-357.
+3. Lundberg, S.M., & Lee, S.I. (2017). A unified approach to interpreting model predictions. *NeurIPS*, 30.
 
 4. Rajkomar, A., Dean, J., & Kohane, I. (2019). Machine learning in medicine. *New England Journal of Medicine*, 380(14), 1347-1358.
 
-5. Sendak, M.P., Gao, M., Brajer, N., & Balu, S. (2020). Presenting machine learning model information to clinical end users with model facts labels. *NPJ Digital Medicine*, 3(1), 41.
-
 ---
 
-## 🔄 Version History
+## 📄 Version History
 
-- **v1.0.0** (November 2025) - Initial release
-  - XGBoost model training and evaluation
-  - LR and Random Forest analysis
+- **v2.0.0** (December 2025)
+  - Deployed web application (FastAPI + React)
+  - SHAP explainability integration
+  - LLM-generated clinical recommendations
+  - Addressed temporal data leakage
+  - Feature selection for deployment feasibility
+
+- **v1.0.0** (November 2025)
+  - Initial XGBoost model training
   - PCA and K-means analysis
   - Interface design sketches
-
----
-
-## 🌟 Future Enhancements
-
-- [ ] Prospective validation study with real-time clinical data
-- [ ] Feature selection analysis for MDCalc-style deployment
-- [ ] LLM integration for natural language explanations
-- [ ] A/B testing: explainable interface vs. traditional alerts
-
----
