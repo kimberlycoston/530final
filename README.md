@@ -212,26 +212,8 @@ requiring attention."
 crrt-clotting-prediction/
 ├── README.md
 ├── requirements.txt
-├── prediction_model.ipynb        # Main analysis notebook
-├── backend/
-│   ├── main.py                   # FastAPI application
-│   ├── model/
-│   │   ├── xgb_model.pkl         # Trained XGBoost model
-│   │   └── scaler.pkl            # Feature scaler
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── RiskGauge.jsx
-│   │   │   ├── SHAPChart.jsx
-│   │   │   └── Recommendations.jsx
-│   │   └── App.jsx
-│   └── package.json
-└── outputs/
-    ├── confusion_matrices.png
-    ├── roc_curves.png
-    ├── shap_summary.png
-    └── feature_importance.png
+└── prediction_model.ipynb
+
 ```
 
 ---
@@ -267,21 +249,8 @@ openai>=1.0.0
 # Launch Jupyter
 jupyter notebook
 
-# Open the main notebook
+# Run the main notebook
 prediction_model.ipynb
-```
-
-### Running the Web Application
-```bash
-# Backend
-cd backend
-uvicorn main:app --reload
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-```
 
 ---
 
